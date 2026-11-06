@@ -1,7 +1,7 @@
 import pymupdf
 import pytest
 
-from pdftool.logic import (
+from xefm_pdftool.logic import (
     merge_pdfs,
     parse_page_ranges,
     pdf_name,

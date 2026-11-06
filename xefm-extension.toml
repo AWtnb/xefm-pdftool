@@ -1,20 +1,20 @@
 [extension]
-id = "pdftool"
+id = "xefm-pdftool"
 version = "0.1.0"
 api_version = 1
-name = "pdftool"
+name = "xefm-pdftool"
 description = "Merge, split, and rotate PDF files"
 min_xefm = "1.13.1"
 
 [contributes.actions]
-"pdftool.merge" = { entry = "pdftool.actions:merge", description = "Merge selected PDFs" }
-"pdftool.split" = { entry = "pdftool.actions:split", description = "Extract page ranges from a PDF" }
-"pdftool.rotate" = { entry = "pdftool.actions:rotate", description = "Rotate selected PDFs clockwise" }
+"xefm-pdftool.merge" = { entry = "xefm_pdftool.actions:merge", description = "Merge selected PDFs" }
+"xefm-pdftool.split" = { entry = "xefm_pdftool.actions:split", description = "Extract page ranges from a PDF" }
+"xefm-pdftool.rotate" = { entry = "xefm_pdftool.actions:rotate", description = "Rotate selected PDFs clockwise" }
 
 [contributes.menus]
-"pdftool.merge" = { menus = ["file", "context"], label = "Merge PDFs…", when = "entry" }
-"pdftool.split" = { menus = ["file", "context"], label = "Split PDF…", when = "entry" }
-"pdftool.rotate" = { menus = ["file", "context"], label = "Rotate PDFs 90°…", when = "entry" }
+"xefm-pdftool.merge" = { menus = ["file", "context"], label = "Merge PDFs…", when = "entry" }
+"xefm-pdftool.split" = { menus = ["file", "context"], label = "Split PDF…", when = "entry" }
+"xefm-pdftool.rotate" = { menus = ["file", "context"], label = "Rotate PDFs 90°…", when = "entry" }
 
 [requires]
 python_packages = ["PyMuPDF>=1.24"]

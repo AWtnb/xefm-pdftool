@@ -1,1 +1,0 @@
-"""pdftool - an XeFM extension."""

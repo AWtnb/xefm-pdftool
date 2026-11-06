@@ -1,4 +1,4 @@
-# pdftool
+# xefm-pdftool
 
 XeFM extension for merging selected PDFs, extracting page ranges, and rotating
 PDFs clockwise by 90 degrees. It uses PyMuPDF.
@@ -30,6 +30,6 @@ Use uv to sync dependencies, run the tests, and validate the XeFM extension:
 
 ```powershell
 uv sync
-uv run pytest
+uv run python -m pytest
 xefm ext check .
 ```
