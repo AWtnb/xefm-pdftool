@@ -1,6 +1,6 @@
 [extension]
 id = "xefm-pdftool"
-version = "0.1.1"
+version = "0.1.2"
 api_version = 1
 name = "xefm-pdftool"
 description = "Edit and transform PDF files"
