@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 import pymupdf
 import pytest
 
+from xefm_pdftool import actions
 from xefm_pdftool.logic import (
     apply_trimbox_pdf,
     extract_pdf,
@@ -16,6 +19,37 @@ from xefm_pdftool.logic import (
     trim_margin_pdf,
     unzip_pdf,
 )
+
+
+class ChooseContext:
+    def choose(self, title, items, *, on_result):
+        self.title = title
+        self.items = list(items)
+        self.on_result = on_result
+
+
+def exercise_action_choice(action, operation, target_name, tmp_path, monkeypatch, index):
+    entry = SimpleNamespace(path=tmp_path / "source.pdf")
+    target = tmp_path / target_name
+    monkeypatch.setattr(
+        actions, "_single_source_target", lambda *args: (entry, target)
+    )
+    captured = {}
+    monkeypatch.setattr(
+        actions, operation.__name__, lambda *args, **kwargs: captured.update(kwargs)
+    )
+    job = SimpleNamespace(
+        checkpoint=lambda: None,
+        progress=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        actions, "_start", lambda ctx, title, targets, work: work(job)
+    )
+    ctx = ChooseContext()
+
+    action(ctx)
+    ctx.on_result(index)
+    return ctx, captured
 
 
 def make_pdf(path, page_count):
@@ -250,6 +284,79 @@ def test_split_and_spread_pages(tmp_path):
     finally:
         split.close()
         spread.close()
+
+
+@pytest.mark.parametrize(
+    ("index", "vertical", "opposite"),
+    [
+        (0, False, False),
+        (1, False, True),
+        (2, True, False),
+        (3, True, True),
+    ],
+)
+def test_split_pages_offers_layout_choices(
+    tmp_path, monkeypatch, index, vertical, opposite
+):
+    ctx, captured = exercise_action_choice(
+        actions.split_pages,
+        actions.split_pages_pdf,
+        "split.pdf",
+        tmp_path,
+        monkeypatch,
+        index,
+    )
+
+    assert ctx.items == [
+        "Left then right (default)",
+        "Right then left",
+        "Top then bottom",
+        "Bottom then top",
+    ]
+    ctx.on_result(index)
+    assert captured["vertical"] is vertical
+    assert captured["opposite"] is opposite
+
+
+@pytest.mark.parametrize(
+    ("index", "vertical", "opposite", "single_top"),
+    [
+        (0, False, False, False),
+        (1, False, True, False),
+        (2, True, False, False),
+        (3, True, True, False),
+        (4, False, False, True),
+        (5, False, True, True),
+        (6, True, False, True),
+        (7, True, True, True),
+    ],
+)
+def test_spread_offers_layout_choices(
+    tmp_path, monkeypatch, index, vertical, opposite, single_top
+):
+    ctx, captured = exercise_action_choice(
+        actions.spread,
+        actions.spread_pages_pdf,
+        "spread.pdf",
+        tmp_path,
+        monkeypatch,
+        index,
+    )
+
+    assert ctx.items == [
+        "Side by side, original order (default)",
+        "Side by side, reverse page order",
+        "Stacked top to bottom, original order",
+        "Stacked bottom to top, reverse page order",
+        "Leave page 1 alone; side by side, original order",
+        "Leave page 1 alone; side by side, reverse page order",
+        "Leave page 1 alone; stacked top to bottom",
+        "Leave page 1 alone; stacked bottom to top",
+    ]
+    ctx.on_result(index)
+    assert captured["vertical"] is vertical
+    assert captured["opposite"] is opposite
+    assert captured["single_top"] is single_top
 
 
 def test_unzip_pdf_writes_odd_and_even_pages(tmp_path):

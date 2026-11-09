@@ -384,26 +384,41 @@ def swap(ctx) -> None:
     _insert_or_swap(ctx, swap_pdf, "swap")
 
 
-def _read_flags(
+def _choose_flags(
     ctx,
     title: str,
-    allowed: set[str],
+    options: Sequence[tuple[str, set[str]]],
     on_accept: Callable[[set[str]], None],
 ) -> None:
-    def accepted(text: str) -> None:
-        flags = {part.strip().lower() for part in text.split(",") if part.strip()}
-        invalid = flags - allowed
-        if invalid:
-            ctx.message(f"{TITLE}: unsupported option: {', '.join(sorted(invalid))}")
+    def selected(index: int | None) -> None:
+        if index is None:
             return
-        on_accept(flags)
+        on_accept(set(options[index][1]))
 
-    ctx.input(
-        "Options (comma-separated): " + ", ".join(sorted(allowed)),
-        "",
-        title=f"{TITLE}: {title}",
-        on_accept=accepted,
+    ctx.choose(
+        f"{TITLE}: {title}",
+        [label for label, _ in options],
+        on_result=selected,
     )
+
+
+_SPLIT_PAGE_OPTIONS = (
+    ("Left then right (default)", set()),
+    ("Right then left", {"o"}),
+    ("Top then bottom", {"v"}),
+    ("Bottom then top", {"v", "o"}),
+)
+
+_SPREAD_OPTIONS = (
+    ("Side by side, original order (default)", set()),
+    ("Side by side, reverse page order", {"o"}),
+    ("Stacked top to bottom, original order", {"v"}),
+    ("Stacked bottom to top, reverse page order", {"v", "o"}),
+    ("Leave page 1 alone; side by side, original order", {"s"}),
+    ("Leave page 1 alone; side by side, reverse page order", {"s", "o"}),
+    ("Leave page 1 alone; stacked top to bottom", {"s", "v"}),
+    ("Leave page 1 alone; stacked bottom to top", {"s", "v", "o"}),
+)
 
 
 def split_pages(ctx) -> None:
@@ -428,7 +443,7 @@ def split_pages(ctx) -> None:
 
         _start(ctx, f"{TITLE}: half split", [target], work)
 
-    _read_flags(ctx, "half split", {"v", "o"}, run)
+    _choose_flags(ctx, "Split each page in half", _SPLIT_PAGE_OPTIONS, run)
 
 
 def split(ctx) -> None:
@@ -459,7 +474,7 @@ def spread(ctx) -> None:
 
         _start(ctx, f"{TITLE}: spread", [target], work)
 
-    _read_flags(ctx, "spread", {"v", "o", "s"}, run)
+    _choose_flags(ctx, "Arrange pages into spreads", _SPREAD_OPTIONS, run)
 
 
 def trim_margin(ctx) -> None:

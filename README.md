@@ -28,8 +28,8 @@ existing files are replaced only after confirmation.
 - **Merge PDFs… / Concatenate PDFs…** combines selected PDFs in pane order and
   asks for an output name.
 - **Extract PDF pages…** writes selected pages from one PDF to a new file.
-- **Split PDF pages in half…** splits each page into left/right halves; `v`
-  selects top/bottom halves and `o` reverses their order.
+- **Split PDF pages in half…** lets you choose left/right or top/bottom halves
+  and which half comes first.
 - **Split PDF by page ranges…** writes each requested range to a separate file.
 - **Rotate PDF pages…** asks for a rotation angle (a multiple of 90) and page
   ranges.
@@ -37,8 +37,8 @@ existing files are replaced only after confirmation.
   the active pane's selected PDF at the requested page.
 - **Swap PDF pages from other pane…** replaces pages in the active pane's PDF
   with the other pane's selected PDF, starting at the requested page.
-- **Spread PDF pages…** combines adjacent pages into spreads; `v` stacks them
-  vertically, `o` reverses each pair, and `s` leaves the first page by itself.
+- **Spread PDF pages…** lets you choose side-by-side or stacked spreads, page
+  order, and whether to leave the first page by itself.
 - **Apply PDF trim boxes…** makes each page's trim box its visible crop.
 - **Trim PDF margins…** crops percentages from every page. Enter one value for
   all sides, two for top/bottom and right/left, or four as
