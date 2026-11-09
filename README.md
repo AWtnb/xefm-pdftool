@@ -1,13 +1,13 @@
 # xefm-pdftool
 
-XeFM extension for editing and transforming PDF files. It uses PyMuPDF.
+[XeFM](https://github.com/crftwr/xefm) extension for editing and transforming PDF files with [PyMuPDF](https://pymupdf.readthedocs.io/).
 
 ## Use
 
 Install the extension from its folder with:
 
 ```powershell
-xefm ext install .
+xefm ext install github:AWtnb/xefm-pdftool
 ```
 
 Actions are available from the **File** menu, the file context menu, and the
