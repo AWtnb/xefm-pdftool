@@ -1,7 +1,6 @@
 # xefm-pdftool
 
-XeFM extension for merging selected PDFs, extracting page ranges, and rotating
-PDFs clockwise by 90 degrees. It uses PyMuPDF.
+XeFM extension for editing and transforming PDF files. It uses PyMuPDF.
 
 ## Use
 
@@ -11,18 +10,36 @@ Install the extension from its folder with:
 xefm ext install .
 ```
 
-In XeFM, select PDFs in one pane and keep a local destination folder open in
-the other pane. The **File** menu, the file context menu, and the command
-palette provide these actions:
+Actions are available from the **File** menu, the file context menu, and the
+command palette. When an action needs parameters, it asks for them with XeFM's
+input prompt. PDF outputs are written to the other pane's local folder, and
+existing files are replaced only after confirmation.
 
-- **Merge PDFs…** combines the selected PDFs in pane order.
-- **Split PDF…** prompts for one or more page ranges (for example `1-3,5`)
-  and writes one PDF for each range.
-- **Rotate PDFs 90°…** writes a clockwise-rotated copy of each selected PDF.
+- **Merge PDFs… / Concatenate PDFs…** combines selected PDFs in pane order and
+  asks for an output name.
+- **Extract PDF pages…** writes selected pages from one PDF to a new file.
+- **Split PDF pages in half…** splits each page into left/right halves; `v`
+  selects top/bottom halves and `o` reverses their order.
+- **Split PDF by page ranges…** writes each requested range to a separate file.
+- **Rotate PDF pages…** asks for a rotation angle (a multiple of 90) and page
+  ranges.
+- **Insert PDF from other pane…** inserts the other pane's selected PDF into
+  the active pane's selected PDF at the requested page.
+- **Swap PDF pages from other pane…** replaces pages in the active pane's PDF
+  with the other pane's selected PDF, starting at the requested page.
+- **Spread PDF pages…** combines adjacent pages into spreads; `v` stacks them
+  vertically, `o` reverses each pair, and `s` leaves the first page by itself.
+- **Apply PDF trim boxes…** makes each page's trim box its visible crop.
+- **Trim PDF margins…** crops percentages from every page. Enter one value for
+  all sides, two for top/bottom and right/left, or four as
+  `top,right,bottom,left`.
+- **Separate odd/even PDF pages…** writes odd- and even-numbered pages to
+  separate files.
 
-The source PDFs are never changed. Existing output files are replaced only
-after confirmation. Page numbers are 1-based. Password-protected PDFs are not
-supported.
+Page ranges are 1-based and comma-separated. They support single pages
+(`5`), closed ranges (`1-3`), open-ended ranges (`7-`), and negative numbers
+counting from the end (`-1`, `-3--1`). The source PDFs are never changed.
+Password-protected PDFs are not supported.
 
 ## Development
 

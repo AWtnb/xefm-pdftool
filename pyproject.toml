@@ -1,7 +1,7 @@
 [project]
 name = "xefm-pdftool"
 version = "0.1.0"
-description = "PDF merge, split, and rotate actions for XeFM"
+description = "PDF editing and transformation actions for XeFM"
 requires-python = ">=3.10"
 dependencies = [
     "PyMuPDF>=1.24",
