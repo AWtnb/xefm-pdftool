@@ -1,5 +1,6 @@
 """XeFM actions for editing and transforming PDF files."""
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from xefm_pdftool.logic import (
@@ -39,7 +40,7 @@ def _pdfs_from_pane(pane):
     ]
 
 
-def _one_pdf(ctx, pane, pane_title):
+def _one_pdf(ctx, pane, pane_title: str):
     entries = _pdfs_from_pane(pane)
     if len(entries) != 1:
         ctx.message(f"{TITLE}: select exactly one PDF in the {pane_title} pane")
@@ -47,7 +48,7 @@ def _one_pdf(ctx, pane, pane_title):
     return entries[0]
 
 
-def _destination(ctx):
+def _destination(ctx) -> Path | None:
     path = ctx.other.path
     if "://" in str(path):
         ctx.message(f"{TITLE}: the other pane must show a local folder")
@@ -59,7 +60,12 @@ def _destination(ctx):
     return destination
 
 
-def _start(ctx, title, targets, work):
+def _start(
+    ctx,
+    title: str,
+    targets: Sequence[Path],
+    work,
+) -> None:
     existing = [target.name for target in targets if target.exists()]
     if existing:
         names = ", ".join(existing)
@@ -72,10 +78,15 @@ def _start(ctx, title, targets, work):
         _run(ctx, title, targets, work)
 
 
-def _run(ctx, title, targets, work):
+def _run(
+    ctx,
+    title: str,
+    targets: Sequence[Path],
+    work,
+) -> None:
     destination_pane = ctx.other.name
 
-    def done(done_ctx, outcome):
+    def done(done_ctx, outcome) -> None:
         if outcome.ok:
             created = [target for target in targets if target.exists()]
             if not created:
@@ -92,11 +103,11 @@ def _run(ctx, title, targets, work):
     ctx.run_task(title, work, on_done=done)
 
 
-def _progress(job, index, total, detail):
+def _progress(job, index: int, total: int, detail: str | int) -> None:
     job.progress(index, total, detail=detail)
 
 
-def _single_source_target(ctx, action_title, suffix):
+def _single_source_target(ctx, action_title: str, suffix: str):
     entries = _selected_pdfs(ctx)
     if len(entries) != 1:
         ctx.message(f"{TITLE}: select exactly one PDF to {action_title.lower()}")
@@ -108,7 +119,7 @@ def _single_source_target(ctx, action_title, suffix):
     return entry, destination / f"{Path(entry.name).stem}{suffix}.pdf"
 
 
-def merge(ctx):
+def merge(ctx) -> None:
     """Merge selected PDF files into one PDF in the other pane."""
     entries = _selected_pdfs(ctx)
     if len(entries) < 2:
@@ -120,14 +131,14 @@ def merge(ctx):
     default = f"{Path(entries[0].name).stem}-merged.pdf"
     sources = [entry.path for entry in entries]
 
-    def accepted(text):
+    def accepted(text: str) -> None:
         name = pdf_name(text, default)
         if name is None:
             ctx.message(f"{TITLE}: enter a valid file name")
             return
         target = destination / name
 
-        def work(job):
+        def work(job) -> None:
             merge_pdfs(
                 sources,
                 target,
@@ -142,12 +153,12 @@ def merge(ctx):
     ctx.input("Output PDF name", default, title=f"{TITLE}: merge", on_accept=accepted)
 
 
-def conc(ctx):
+def conc(ctx) -> None:
     """Concatenate selected PDFs into one PDF in the other pane."""
     merge(ctx)
 
 
-def split_ranges(ctx):
+def split_ranges(ctx) -> None:
     """Extract the requested page ranges into separate PDFs."""
     entries = _selected_pdfs(ctx)
     if len(entries) != 1:
@@ -159,18 +170,20 @@ def split_ranges(ctx):
     entry = entries[0]
     stem = Path(entry.name).stem
 
-    def accepted(text):
+    def accepted(text: str) -> None:
         try:
             ranges = parse_page_ranges(text, pdf_page_count(entry.path))
         except ValueError as exc:
             ctx.message(f"{TITLE}: {exc}")
             return
+
+        assert destination is not None  # for type checker
         targets = [
             destination / f"{stem}-pages-{range_suffix(page_range)}.pdf"
             for page_range in ranges
         ]
 
-        def work(job):
+        def work(job) -> None:
             split_pdf(
                 entry.path,
                 ranges,
@@ -191,7 +204,7 @@ def split_ranges(ctx):
     )
 
 
-def rotate(ctx):
+def rotate(ctx) -> None:
     """Rotate selected PDF pages by a multiple of 90 degrees."""
     entries = _selected_pdfs(ctx)
     if not entries:
@@ -204,7 +217,7 @@ def rotate(ctx):
         destination / f"{Path(entry.name).stem}-rotated.pdf" for entry in entries
     ]
 
-    def request_ranges(degrees):
+    def request_ranges(degrees: str) -> None:
         try:
             angle = int(degrees.strip())
             if angle % 90:
@@ -213,8 +226,8 @@ def rotate(ctx):
             ctx.message(f"{TITLE}: rotation must be a multiple of 90 degrees")
             return
 
-        def accepted(ranges):
-            def work(job):
+        def accepted(ranges: str) -> None:
+            def work(job) -> None:
                 for index, (entry, target) in enumerate(zip(entries, targets)):
                     job.checkpoint()
                     rotate_pdf(
@@ -222,10 +235,12 @@ def rotate(ctx):
                         target,
                         angle,
                         checkpoint=job.checkpoint,
-                        progress=lambda done, total, detail, index=index, entry=entry: job.progress(
-                            index,
-                            len(entries),
-                            detail=f"{entry.name} — page {done + 1}/{total}",
+                        progress=lambda done, total, detail, index=index, entry=entry: (
+                            job.progress(
+                                index,
+                                len(entries),
+                                detail=f"{entry.name} — page {done + 1}/{total}",
+                            )
                         ),
                         page_ranges=ranges,
                     )
@@ -247,7 +262,7 @@ def rotate(ctx):
     )
 
 
-def apply_trimbox(ctx):
+def apply_trimbox(ctx) -> None:
     """Apply each page's trim box to the selected PDFs."""
     entries = _selected_pdfs(ctx)
     if not entries:
@@ -260,32 +275,34 @@ def apply_trimbox(ctx):
         destination / f"{Path(entry.name).stem}-trimbox.pdf" for entry in entries
     ]
 
-    def work(job):
+    def work(job) -> None:
         for index, (entry, target) in enumerate(zip(entries, targets)):
             job.checkpoint()
             apply_trimbox_pdf(
                 entry.path,
                 target,
                 checkpoint=job.checkpoint,
-                progress=lambda done, total, detail, index=index, entry=entry: job.progress(
-                    index,
-                    len(entries),
-                    detail=f"{entry.name} — page {done + 1}/{total}",
+                progress=lambda done, total, detail, index=index, entry=entry: (
+                    job.progress(
+                        index,
+                        len(entries),
+                        detail=f"{entry.name} — page {done + 1}/{total}",
+                    )
                 ),
             )
 
     _start(ctx, f"{TITLE}: apply trim box", targets, work)
 
 
-def extract(ctx):
+def extract(ctx) -> None:
     """Extract selected page ranges from one PDF."""
     selected = _single_source_target(ctx, "extract pages from", "-extracted")
     if selected is None:
         return
     entry, target = selected
 
-    def accepted(ranges):
-        def work(job):
+    def accepted(ranges: str) -> None:
+        def work(job) -> None:
             extract_pdf(
                 entry.path,
                 target,
@@ -306,7 +323,7 @@ def extract(ctx):
     )
 
 
-def _paired_sources(ctx, action_title):
+def _paired_sources(ctx, action_title: str):
     base = _one_pdf(ctx, ctx.pane, "active")
     if base is None:
         return None
@@ -320,13 +337,13 @@ def _paired_sources(ctx, action_title):
     return base, other, target
 
 
-def _insert_or_swap(ctx, operation, label):
+def _insert_or_swap(ctx, operation, label: str) -> None:
     selected = _paired_sources(ctx, label)
     if selected is None:
         return
     base, other, target = selected
 
-    def accepted(start_text):
+    def accepted(start_text: str) -> None:
         try:
             start = int(start_text.strip())
             if start == 0:
@@ -335,7 +352,7 @@ def _insert_or_swap(ctx, operation, label):
             ctx.message(f"{TITLE}: enter a non-zero page number")
             return
 
-        def work(job):
+        def work(job) -> None:
             operation(
                 base.path,
                 other.path,
@@ -357,18 +374,23 @@ def _insert_or_swap(ctx, operation, label):
     )
 
 
-def insert(ctx):
+def insert(ctx) -> None:
     """Insert the other pane's selected PDF into the active pane's PDF."""
     _insert_or_swap(ctx, insert_pdf, "insert")
 
 
-def swap(ctx):
+def swap(ctx) -> None:
     """Replace pages in the active pane's PDF with the other pane's PDF."""
     _insert_or_swap(ctx, swap_pdf, "swap")
 
 
-def _read_flags(ctx, title, allowed, on_accept):
-    def accepted(text):
+def _read_flags(
+    ctx,
+    title: str,
+    allowed: set[str],
+    on_accept: Callable[[set[str]], None],
+) -> None:
+    def accepted(text: str) -> None:
         flags = {part.strip().lower() for part in text.split(",") if part.strip()}
         invalid = flags - allowed
         if invalid:
@@ -384,15 +406,15 @@ def _read_flags(ctx, title, allowed, on_accept):
     )
 
 
-def split_pages(ctx):
+def split_pages(ctx) -> None:
     """Split every page into two half-pages."""
     selected = _single_source_target(ctx, "split", "-split")
     if selected is None:
         return
     entry, target = selected
 
-    def run(flags):
-        def work(job):
+    def run(flags: set[str]) -> None:
+        def work(job) -> None:
             split_pages_pdf(
                 entry.path,
                 target,
@@ -409,20 +431,20 @@ def split_pages(ctx):
     _read_flags(ctx, "half split", {"v", "o"}, run)
 
 
-def split(ctx):
+def split(ctx) -> None:
     """Split each selected PDF page into two half-pages."""
     split_pages(ctx)
 
 
-def spread(ctx):
+def spread(ctx) -> None:
     """Combine adjacent pages into spreads."""
     selected = _single_source_target(ctx, "spread pages from", "-spread")
     if selected is None:
         return
     entry, target = selected
 
-    def run(flags):
-        def work(job):
+    def run(flags: set[str]) -> None:
+        def work(job) -> None:
             spread_pages_pdf(
                 entry.path,
                 target,
@@ -440,15 +462,15 @@ def spread(ctx):
     _read_flags(ctx, "spread", {"v", "o", "s"}, run)
 
 
-def trim_margin(ctx):
+def trim_margin(ctx) -> None:
     """Crop percentage margins from one PDF."""
     selected = _single_source_target(ctx, "trim margins from", "-trimmargin")
     if selected is None:
         return
     entry, target = selected
 
-    def accepted(margins):
-        def work(job):
+    def accepted(margins: str) -> None:
+        def work(job) -> None:
             trim_margin_pdf(
                 entry.path,
                 target,
@@ -469,7 +491,7 @@ def trim_margin(ctx):
     )
 
 
-def unzip(ctx):
+def unzip(ctx) -> None:
     """Write odd- and even-numbered pages to separate PDFs."""
     entry = _one_pdf(ctx, ctx.pane, "active")
     if entry is None:
@@ -480,7 +502,7 @@ def unzip(ctx):
     stem = Path(entry.name).stem
     targets = [destination / f"{stem}-odd.pdf", destination / f"{stem}-even.pdf"]
 
-    def work(job):
+    def work(job) -> None:
         unzip_pdf(
             entry.path,
             targets[0],

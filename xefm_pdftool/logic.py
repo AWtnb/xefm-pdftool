@@ -4,6 +4,7 @@ import math
 import os
 import re
 import tempfile
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -12,7 +13,7 @@ import pymupdf
 _PAGE_RANGE = re.compile(r"(-?\d+)\s*(?:-\s*(-?\d*))?")
 
 
-def pdf_name(text, default):
+def pdf_name(text: str | None, default: str) -> str | None:
     """Return a safe PDF file name, or None if the input is not a file name."""
     name = (text or "").strip() or default
     if (
@@ -24,7 +25,9 @@ def pdf_name(text, default):
     return name if name.lower().endswith(".pdf") else name + ".pdf"
 
 
-def parse_page_ranges(text, page_count, allow_overlaps=False):
+def parse_page_ranges(
+    text: str, page_count: int, allow_overlaps: bool = False
+) -> list[tuple[int, int]]:
     """Parse 1-based inclusive ranges; negative pages count back from the end."""
     if not text or not text.strip():
         raise ValueError("Enter one or more page ranges, such as 1-3,5.")
@@ -68,7 +71,7 @@ def parse_page_ranges(text, page_count, allow_overlaps=False):
     return ranges
 
 
-def pdf_page_count(source):
+def pdf_page_count(source: Path) -> int:
     """Return a PDF's page count after applying the standard PDF validation."""
     document = _open_pdf(source)
     try:
@@ -77,12 +80,12 @@ def pdf_page_count(source):
         document.close()
 
 
-def range_suffix(page_range):
+def range_suffix(page_range: tuple[int, int]) -> str:
     first, last = page_range
     return str(first) if first == last else f"{first}-{last}"
 
 
-def _page_indices(ranges):
+def _page_indices(ranges: Sequence[tuple[int, int]]) -> list[int]:
     indices = []
     for first, last in ranges:
         for page_number in range(first, last + 1):
@@ -90,7 +93,7 @@ def _page_indices(ranges):
     return indices
 
 
-def _open_pdf(path):
+def _open_pdf(path: Path):
     with path.open("rb") as stream:
         document = pymupdf.open(stream=stream.read(), filetype="pdf")
     if document.needs_pass:
@@ -102,7 +105,7 @@ def _open_pdf(path):
     return document
 
 
-def _save_atomically(document, target):
+def _save_atomically(document, target: Path) -> None:
     temporary = _temporary_pdf_path(target)
     try:
         document.save(temporary)
@@ -112,7 +115,7 @@ def _save_atomically(document, target):
             temporary.unlink()
 
 
-def _temporary_pdf_path(target):
+def _temporary_pdf_path(target: Path) -> Path:
     descriptor, name = tempfile.mkstemp(
         prefix=f".{target.stem}.", suffix=".part.pdf", dir=target.parent
     )
@@ -120,14 +123,21 @@ def _temporary_pdf_path(target):
     return target.with_name(os.path.basename(name))
 
 
-def _ensure_distinct_outputs(sources, targets):
+def _ensure_distinct_outputs(
+    sources: Sequence[Path], targets: Sequence[Path]
+) -> None:
     output_paths = {target.resolve() for target in targets}
     for source in sources:
         if "://" not in str(source) and Path(str(source)).resolve() in output_paths:
             raise ValueError(f"Output would overwrite an input PDF: {source.name}")
 
 
-def merge_pdfs(sources, target, checkpoint=None, progress=None):
+def merge_pdfs(
+    sources: Sequence[Path],
+    target: Path,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Merge source PDFs, writing the completed result atomically."""
     if not sources:
         raise ValueError("Select at least one source PDF.")
@@ -151,7 +161,13 @@ def merge_pdfs(sources, target, checkpoint=None, progress=None):
         result.close()
 
 
-def split_pdf(source, ranges, targets, checkpoint=None, progress=None):
+def split_pdf(
+    source: Path,
+    ranges: Sequence[tuple[int, int]],
+    targets: Sequence[Path],
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Write each 1-based inclusive page range to its own PDF."""
     if len(ranges) != len(targets):
         raise ValueError("Each page range must have one output file.")
@@ -192,13 +208,13 @@ def split_pdf(source, ranges, targets, checkpoint=None, progress=None):
 
 
 def rotate_pdf(
-    source,
-    target,
-    degrees=90,
-    checkpoint=None,
-    progress=None,
-    page_ranges=None,
-):
+    source: Path,
+    target: Path,
+    degrees: int = 90,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+    page_ranges: str | None = None,
+) -> None:
     """Write a rotated copy of a PDF, leaving the source unchanged."""
     if not isinstance(degrees, int) or degrees % 90:
         raise ValueError("Rotation must be a multiple of 90 degrees.")
@@ -225,7 +241,7 @@ def rotate_pdf(
         document.close()
 
 
-def resolve_insertion_index(value, page_count):
+def resolve_insertion_index(value: int, page_count: int) -> int:
     """Convert a 1-based (or negative-from-end) insertion page to an index."""
     if not isinstance(value, int) or value == 0:
         raise ValueError("Enter a non-zero insertion page.")
@@ -235,7 +251,13 @@ def resolve_insertion_index(value, page_count):
     return index
 
 
-def _copy_page_indices(source, target, indices, checkpoint=None, progress=None):
+def _copy_page_indices(
+    source: Path,
+    target: Path,
+    indices: Sequence[int],
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     document = _open_pdf(source)
     result = pymupdf.open()
     try:
@@ -253,7 +275,13 @@ def _copy_page_indices(source, target, indices, checkpoint=None, progress=None):
         document.close()
 
 
-def extract_pdf(source, target, ranges, checkpoint=None, progress=None):
+def extract_pdf(
+    source: Path,
+    target: Path,
+    ranges: str,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Write the selected pages, preserving the range order."""
     document = _open_pdf(source)
     try:
@@ -268,8 +296,13 @@ def extract_pdf(source, target, ranges, checkpoint=None, progress=None):
 
 
 def insert_pdf(
-    base_source, insert_source, target, start=1, checkpoint=None, progress=None
-):
+    base_source: Path,
+    insert_source: Path,
+    target: Path,
+    start: int = 1,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Insert every page from one PDF before a page in another PDF."""
     _ensure_distinct_outputs([base_source, insert_source], [target])
     with ExitStack() as stack:
@@ -297,8 +330,13 @@ def insert_pdf(
 
 
 def swap_pdf(
-    base_source, replacement_source, target, start=1, checkpoint=None, progress=None
-):
+    base_source: Path,
+    replacement_source: Path,
+    target: Path,
+    start: int = 1,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Replace pages in the base PDF with every page from another PDF."""
     _ensure_distinct_outputs([base_source, replacement_source], [target])
     with ExitStack() as stack:
@@ -328,7 +366,12 @@ def swap_pdf(
         _save_atomically(result, target)
 
 
-def apply_trimbox_pdf(source, target, checkpoint=None, progress=None):
+def apply_trimbox_pdf(
+    source: Path,
+    target: Path,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str | int], None] | None = None,
+) -> None:
     """Set each page's media box to its trim box."""
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
@@ -346,7 +389,7 @@ def apply_trimbox_pdf(source, target, checkpoint=None, progress=None):
         document.close()
 
 
-def _parse_margins(text):
+def _parse_margins(text: str) -> list[float]:
     try:
         values = [float(part.strip()) for part in text.split(",")]
     except ValueError as exc:
@@ -362,7 +405,13 @@ def _parse_margins(text):
     return values
 
 
-def trim_margin_pdf(source, target, margins, checkpoint=None, progress=None):
+def trim_margin_pdf(
+    source: Path,
+    target: Path,
+    margins: str,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str | int], None] | None = None,
+) -> None:
     """Crop percentage margins from each page (top,right,bottom,left)."""
     top, right, bottom, left = _parse_margins(margins)
     _ensure_distinct_outputs([source], [target])
@@ -398,14 +447,21 @@ def trim_margin_pdf(source, target, margins, checkpoint=None, progress=None):
         document.close()
 
 
-def _show_clipped_page(output, source, page_number, clip):
+def _show_clipped_page(
+    output, source, page_number: int, clip
+) -> None:
     page = output.new_page(width=clip.width, height=clip.height)
     page.show_pdf_page(page.rect, source, page_number, clip=clip)
 
 
 def split_pages_pdf(
-    source, target, vertical=False, opposite=False, checkpoint=None, progress=None
-):
+    source: Path,
+    target: Path,
+    vertical: bool = False,
+    opposite: bool = False,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str | int], None] | None = None,
+) -> None:
     """Split every page into two equal halves."""
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
@@ -442,14 +498,14 @@ def split_pages_pdf(
 
 
 def spread_pages_pdf(
-    source,
-    target,
-    vertical=False,
-    single_top=False,
-    opposite=False,
-    checkpoint=None,
-    progress=None,
-):
+    source: Path,
+    target: Path,
+    vertical: bool = False,
+    single_top: bool = False,
+    opposite: bool = False,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str | int], None] | None = None,
+) -> None:
     """Combine adjacent page pairs into landscape/portrait spreads."""
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
@@ -512,7 +568,13 @@ def spread_pages_pdf(
         document.close()
 
 
-def unzip_pdf(source, odd_target, even_target, checkpoint=None, progress=None):
+def unzip_pdf(
+    source: Path,
+    odd_target: Path,
+    even_target: Path,
+    checkpoint: Callable[[], None] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> None:
     """Write odd- and even-numbered pages to separate PDFs."""
     _ensure_distinct_outputs([source], [odd_target, even_target])
     document = _open_pdf(source)
