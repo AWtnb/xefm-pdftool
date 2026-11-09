@@ -56,8 +56,20 @@ Password-protected PDFs are not supported.
 
 Use uv to sync dependencies, run the tests, and validate the XeFM extension:
 
-```powershell
+```cmd
 uv sync
 uv run python -m pytest
 xefm ext check .
 ```
+
+To publish a release, commit all changes first, then run:
+
+```cmd
+uv run scripts/release.py
+```
+
+The script increments the patch version in both TOML files, syncs `uv.lock`,
+creates a release commit and annotated `vX.Y.Z` tag, then atomically pushes the
+current branch and tag to `origin`. The working tree must be clean. Use
+`--part minor` or `--part major` for a different version component, or
+`--dry-run` to preview.
