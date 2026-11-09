@@ -5,34 +5,35 @@ api_version = 1
 name = "xefm-pdftool"
 description = "Edit and transform PDF files"
 min_xefm = "1.13.1"
+updates = "github:AWtnb/xefm-pdftool"
 
 [contributes.actions]
-"xefm-pdftool.merge" = { entry = "xefm_pdftool.actions:merge", description = "Merge selected PDFs" }
-"xefm-pdftool.conc" = { entry = "xefm_pdftool.actions:conc", description = "Concatenate selected PDFs" }
-"xefm-pdftool.extract" = { entry = "xefm_pdftool.actions:extract", description = "Extract pages from a PDF" }
-"xefm-pdftool.split" = { entry = "xefm_pdftool.actions:split", description = "Split each PDF page in half" }
-"xefm-pdftool.split-ranges" = { entry = "xefm_pdftool.actions:split_ranges", description = "Split PDFs by page ranges" }
-"xefm-pdftool.rotate" = { entry = "xefm_pdftool.actions:rotate", description = "Rotate selected PDF pages" }
-"xefm-pdftool.insert" = { entry = "xefm_pdftool.actions:insert", description = "Insert pages from the other pane" }
-"xefm-pdftool.swap" = { entry = "xefm_pdftool.actions:swap", description = "Replace pages with the other pane's PDF" }
-"xefm-pdftool.spread" = { entry = "xefm_pdftool.actions:spread", description = "Combine adjacent pages into spreads" }
-"xefm-pdftool.apply-trimbox" = { entry = "xefm_pdftool.actions:apply_trimbox", description = "Apply PDF trim boxes" }
-"xefm-pdftool.trim-margin" = { entry = "xefm_pdftool.actions:trim_margin", description = "Crop percentage margins" }
-"xefm-pdftool.unzip" = { entry = "xefm_pdftool.actions:unzip", description = "Separate odd and even pages" }
+"pdftool.merge" = { entry = "xefm_pdftool.actions:merge", description = "Merge selected PDFs" }
+"pdftool.conc" = { entry = "xefm_pdftool.actions:conc", description = "Concatenate selected PDFs" }
+"pdftool.extract" = { entry = "xefm_pdftool.actions:extract", description = "Extract pages from a PDF" }
+"pdftool.split" = { entry = "xefm_pdftool.actions:split", description = "Split each PDF page in half" }
+"pdftool.split-ranges" = { entry = "xefm_pdftool.actions:split_ranges", description = "Split PDFs by page ranges" }
+"pdftool.rotate" = { entry = "xefm_pdftool.actions:rotate", description = "Rotate selected PDF pages" }
+"pdftool.insert" = { entry = "xefm_pdftool.actions:insert", description = "Insert pages from the other pane" }
+"pdftool.swap" = { entry = "xefm_pdftool.actions:swap", description = "Replace pages with the other pane's PDF" }
+"pdftool.spread" = { entry = "xefm_pdftool.actions:spread", description = "Combine adjacent pages into spreads" }
+"pdftool.apply-trimbox" = { entry = "xefm_pdftool.actions:apply_trimbox", description = "Apply PDF trim boxes" }
+"pdftool.trim-margin" = { entry = "xefm_pdftool.actions:trim_margin", description = "Crop percentage margins" }
+"pdftool.unzip" = { entry = "xefm_pdftool.actions:unzip", description = "Separate odd and even pages" }
 
 [contributes.menus]
-"xefm-pdftool.merge" = { menus = ["file", "context"], label = "Merge PDFs…", when = "entry" }
-"xefm-pdftool.conc" = { menus = ["file", "context"], label = "Concatenate PDFs…", when = "entry" }
-"xefm-pdftool.extract" = { menus = ["file", "context"], label = "Extract PDF pages…", when = "entry" }
-"xefm-pdftool.split" = { menus = ["file", "context"], label = "Split PDF pages in half…", when = "entry" }
-"xefm-pdftool.split-ranges" = { menus = ["file", "context"], label = "Split PDF by page ranges…", when = "entry" }
-"xefm-pdftool.rotate" = { menus = ["file", "context"], label = "Rotate PDF pages…", when = "entry" }
-"xefm-pdftool.insert" = { menus = ["file", "context"], label = "Insert PDF from other pane…", when = "entry" }
-"xefm-pdftool.swap" = { menus = ["file", "context"], label = "Swap PDF pages from other pane…", when = "entry" }
-"xefm-pdftool.spread" = { menus = ["file", "context"], label = "Spread PDF pages…", when = "entry" }
-"xefm-pdftool.apply-trimbox" = { menus = ["file", "context"], label = "Apply PDF trim boxes…", when = "entry" }
-"xefm-pdftool.trim-margin" = { menus = ["file", "context"], label = "Trim PDF margins…", when = "entry" }
-"xefm-pdftool.unzip" = { menus = ["file", "context"], label = "Separate odd/even PDF pages…", when = "entry" }
+"pdftool.merge" = { menus = ["file", "context"], label = "Merge PDFs…", when = "entry" }
+"pdftool.conc" = { menus = ["file", "context"], label = "Concatenate PDFs…", when = "entry" }
+"pdftool.extract" = { menus = ["file", "context"], label = "Extract PDF pages…", when = "entry" }
+"pdftool.split" = { menus = ["file", "context"], label = "Split PDF pages in half…", when = "entry" }
+"pdftool.split-ranges" = { menus = ["file", "context"], label = "Split PDF by page ranges…", when = "entry" }
+"pdftool.rotate" = { menus = ["file", "context"], label = "Rotate PDF pages…", when = "entry" }
+"pdftool.insert" = { menus = ["file", "context"], label = "Insert PDF from other pane…", when = "entry" }
+"pdftool.swap" = { menus = ["file", "context"], label = "Swap PDF pages from other pane…", when = "entry" }
+"pdftool.spread" = { menus = ["file", "context"], label = "Spread PDF pages…", when = "entry" }
+"pdftool.apply-trimbox" = { menus = ["file", "context"], label = "Apply PDF trim boxes…", when = "entry" }
+"pdftool.trim-margin" = { menus = ["file", "context"], label = "Trim PDF margins…", when = "entry" }
+"pdftool.unzip" = { menus = ["file", "context"], label = "Separate odd/even PDF pages…", when = "entry" }
 
 [requires]
 python_packages = ["PyMuPDF>=1.24"]

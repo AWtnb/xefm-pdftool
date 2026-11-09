@@ -6,9 +6,19 @@
 
 Install the extension from its folder with:
 
-```powershell
+```
 xefm ext install github:AWtnb/xefm-pdftool
 ```
+
+## Updating
+
+After a newer release is published, update the extension with:
+
+```cmd
+xefm ext upgrade xefm-pdftool
+```
+
+In XeFM, choose **Tools > Advanced > Check for Extension Updates…** instead.
 
 Actions are available from the **File** menu, the file context menu, and the
 command palette. When an action needs parameters, it asks for them with XeFM's
