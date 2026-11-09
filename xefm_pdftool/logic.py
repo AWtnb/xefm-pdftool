@@ -43,10 +43,19 @@ def parse_page_ranges(text, page_count, allow_overlaps=False):
         )
         if first == 0 or last == 0:
             raise ValueError(f"Page numbers cannot be zero: {token!r}")
-        first = first if first > 0 else page_count + first + 1
-        last = last if last is None or last > 0 else page_count + last + 1
+        first = first if not first <= 0 else page_count + first + 1
+        last = (
+            last
+            if last is None or not last <= 0
+            else page_count + last + 1
+        )
         last = page_count if last is None else last
-        if first < 1 or first > page_count or last < first or last > page_count:
+        if (
+            first < 1
+            or page_count < first
+            or last < first
+            or page_count < last
+        ):
             raise ValueError(
                 f"Page range is outside the {page_count}-page PDF: {token!r}"
             )
@@ -71,6 +80,14 @@ def pdf_page_count(source):
 def range_suffix(page_range):
     first, last = page_range
     return str(first) if first == last else f"{first}-{last}"
+
+
+def _page_indices(ranges):
+    indices = []
+    for first, last in ranges:
+        for page_number in range(first, last + 1):
+            indices.append(page_number - 1)
+    return indices
 
 
 def _open_pdf(path):
@@ -145,7 +162,7 @@ def split_pdf(source, ranges, targets, checkpoint=None, progress=None):
     temporary_files = []
     try:
         for first, last in ranges:
-            if first < 1 or last < first or last > document.page_count:
+            if first < 1 or last < first or document.page_count < last:
                 raise ValueError(
                     f"Page range {range_suffix((first, last))} exceeds the "
                     f"{document.page_count}-page PDF."
@@ -193,11 +210,7 @@ def rotate_pdf(
             ranges = parse_page_ranges(
                 page_ranges, document.page_count, allow_overlaps=True
             )
-            selected = {
-                page_number - 1
-                for first, last in ranges
-                for page_number in range(first, last + 1)
-            }
+            selected = set(_page_indices(ranges))
         for index, page in enumerate(document):
             if checkpoint:
                 checkpoint()
@@ -216,8 +229,8 @@ def resolve_insertion_index(value, page_count):
     """Convert a 1-based (or negative-from-end) insertion page to an index."""
     if not isinstance(value, int) or value == 0:
         raise ValueError("Enter a non-zero insertion page.")
-    index = value - 1 if value > 0 else page_count + value
-    if index < 0 or index > page_count:
+    index = value - 1 if not value <= 0 else page_count + value
+    if index < 0 or page_count < index:
         raise ValueError(f"Insertion page must be between 1 and {page_count + 1}.")
     return index
 
@@ -247,11 +260,7 @@ def extract_pdf(source, target, ranges, checkpoint=None, progress=None):
         parsed_ranges = parse_page_ranges(
             ranges, document.page_count, allow_overlaps=True
         )
-        indices = [
-            page_number - 1
-            for first, last in parsed_ranges
-            for page_number in range(first, last + 1)
-        ]
+        indices = _page_indices(parsed_ranges)
     finally:
         document.close()
     _ensure_distinct_outputs([source], [target])
@@ -300,7 +309,7 @@ def swap_pdf(
         result = pymupdf.open()
         stack.callback(result.close)
         position = resolve_insertion_index(start, base.page_count)
-        if position == base.page_count:
+        if base.page_count == position:
             raise ValueError("The swap start page must refer to an existing page.")
         if checkpoint:
             checkpoint()
@@ -369,7 +378,10 @@ def trim_margin_pdf(source, target, margins, checkpoint=None, progress=None):
             x_outset = box.width * right / 100
             y_inset = box.height * top / 100
             y_outset = box.height * bottom / 100
-            if x_inset + x_outset >= box.width or y_inset + y_outset >= box.height:
+            if (
+                box.width <= x_inset + x_outset
+                or box.height <= y_inset + y_outset
+            ):
                 raise ValueError("Margins would remove the entire page.")
             page.set_mediabox(
                 pymupdf.Rect(
@@ -451,7 +463,7 @@ def spread_pages_pdf(
             if checkpoint:
                 checkpoint()
             first = document[page_numbers[index]]
-            if index + 1 == len(page_numbers):
+            if len(page_numbers) == index + 1:
                 output.insert_pdf(
                     document, from_page=first.number, to_page=first.number
                 )
