@@ -43,11 +43,17 @@ def test_pdf_name_adds_extension_and_rejects_paths():
 
 
 def test_parse_page_ranges():
-    assert parse_page_ranges("1-3, 5, 8-10") == [(1, 3), (5, 5), (8, 10)]
-    assert parse_page_ranges("1-1000000000") == [(1, 1000000000)]
+    assert parse_page_ranges("1-3, 5, 8-10", 10) == [
+        (1, 3),
+        (5, 5),
+        (8, 10),
+    ]
+    assert parse_page_ranges("1-1000000000", 1_000_000_000) == [
+        (1, 1_000_000_000)
+    ]
     for text in ("", "0", "3-1", "1-2,2-3", "one"):
         with pytest.raises(ValueError):
-            parse_page_ranges(text)
+            parse_page_ranges(text, 10)
 
 
 def test_parse_page_ranges_supports_pdfjig_syntax_with_page_count():
@@ -55,12 +61,14 @@ def test_parse_page_ranges_supports_pdfjig_syntax_with_page_count():
         "1-3,5,7-,-3--1", 10, allow_overlaps=True
     ) == [(1, 3), (5, 5), (7, 10), (8, 10)]
     assert parse_page_ranges("-1", 3) == [(3, 3)]
+    assert parse_page_ranges("-3--1", 5) == [(3, 5)]
+    assert parse_page_ranges("2-", 5) == [(2, 5)]
     for text in ("", "0", "1-0", "5-3", "1-4", "abc"):
         with pytest.raises(ValueError):
             parse_page_ranges(text, 3)
 
-    with pytest.raises(ValueError, match="Negative and open-ended"):
-        parse_page_ranges("1-")
+    with pytest.raises(ValueError, match="outside"):
+        parse_page_ranges("-4", 3)
 
 
 def test_merge_pdfs_preserves_source_order(tmp_path):
@@ -132,13 +140,13 @@ def test_rotate_pdf_can_rotate_only_selected_pages(tmp_path):
     source = make_pdf(tmp_path / "source.pdf", 3)
     target = tmp_path / "rotated.pdf"
 
-    rotate_pdf(source, target, -90, page_ranges="2")
+    rotate_pdf(source, target, -90, page_ranges="-1")
 
     original = pymupdf.open(source)
     rotated = pymupdf.open(target)
     try:
         assert [page.rotation for page in original] == [0, 0, 0]
-        assert [page.rotation for page in rotated] == [0, 270, 0]
+        assert [page.rotation for page in rotated] == [0, 0, 270]
     finally:
         original.close()
         rotated.close()
@@ -148,7 +156,7 @@ def test_extract_pdf_writes_selected_pages_in_requested_order(tmp_path):
     source = make_pdf(tmp_path / "source.pdf", 5)
     target = tmp_path / "extracted.pdf"
 
-    extract_pdf(source, target, "5,1-2")
+    extract_pdf(source, target, "-1,1-2")
 
     assert page_text(target) == ["Page 5", "Page 1", "Page 2"]
     assert source.exists()

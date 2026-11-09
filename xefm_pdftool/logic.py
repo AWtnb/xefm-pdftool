@@ -24,10 +24,12 @@ def pdf_name(text, default):
     return name if name.lower().endswith(".pdf") else name + ".pdf"
 
 
-def parse_page_ranges(text, page_count=None, allow_overlaps=False):
-    """Parse 1-based inclusive ranges, resolving open and negative pages if bounded."""
+def parse_page_ranges(text, page_count, allow_overlaps=False):
+    """Parse 1-based inclusive ranges; negative pages count back from the end."""
     if not text or not text.strip():
         raise ValueError("Enter one or more page ranges, such as 1-3,5.")
+    if page_count < 1:
+        raise ValueError("The PDF has no pages.")
     ranges = []
     for part in text.split(","):
         token = part.strip()
@@ -39,25 +41,15 @@ def parse_page_ranges(text, page_count=None, allow_overlaps=False):
         last = first if end_text is None else (
             page_count if end_text == "" else int(end_text)
         )
-        if page_count is None:
-            if first == 0 or last == 0:
-                raise ValueError(f"Page numbers cannot be zero: {token!r}")
-            if first < 1 or last is None:
-                raise ValueError("Negative and open-ended pages require a page count.")
-            if last < first:
-                raise ValueError(f"Invalid page range: {token!r}")
-        else:
-            if page_count < 1:
-                raise ValueError("The PDF has no pages.")
-            if first == 0 or last == 0:
-                raise ValueError(f"Page numbers cannot be zero: {token!r}")
-            first = first if first > 0 else page_count + first + 1
-            last = last if last is None or last > 0 else page_count + last + 1
-            last = page_count if last is None else last
-            if first < 1 or first > page_count or last < first or last > page_count:
-                raise ValueError(
-                    f"Page range is outside the {page_count}-page PDF: {token!r}"
-                )
+        if first == 0 or last == 0:
+            raise ValueError(f"Page numbers cannot be zero: {token!r}")
+        first = first if first > 0 else page_count + first + 1
+        last = last if last is None or last > 0 else page_count + last + 1
+        last = page_count if last is None else last
+        if first < 1 or first > page_count or last < first or last > page_count:
+            raise ValueError(
+                f"Page range is outside the {page_count}-page PDF: {token!r}"
+            )
         if not allow_overlaps and any(
             first <= previous_last and previous_first <= last
             for previous_first, previous_last in ranges
@@ -65,6 +57,15 @@ def parse_page_ranges(text, page_count=None, allow_overlaps=False):
             raise ValueError("Page ranges must not overlap.")
         ranges.append((first, last))
     return ranges
+
+
+def pdf_page_count(source):
+    """Return a PDF's page count after applying the standard PDF validation."""
+    document = _open_pdf(source)
+    try:
+        return document.page_count
+    finally:
+        document.close()
 
 
 def range_suffix(page_range):

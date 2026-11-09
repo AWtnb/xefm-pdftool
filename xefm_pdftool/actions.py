@@ -9,6 +9,7 @@ from xefm_pdftool.logic import (
     merge_pdfs,
     parse_page_ranges,
     pdf_name,
+    pdf_page_count,
     range_suffix,
     rotate_pdf,
     split_pages_pdf,
@@ -160,7 +161,7 @@ def split_ranges(ctx):
 
     def accepted(text):
         try:
-            ranges = parse_page_ranges(text)
+            ranges = parse_page_ranges(text, pdf_page_count(entry.path))
         except ValueError as exc:
             ctx.message(f"{TITLE}: {exc}")
             return
@@ -183,7 +184,7 @@ def split_ranges(ctx):
         _start(ctx, f"{TITLE}: split", targets, work)
 
     ctx.input(
-        "Page ranges (for example 1-3,5)",
+        "Page ranges (for example 1-3,5,7-,-1)",
         "",
         title=f"{TITLE}: split",
         on_accept=accepted,

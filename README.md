@@ -36,9 +36,10 @@ existing files are replaced only after confirmation.
 - **Separate odd/even PDF pages…** writes odd- and even-numbered pages to
   separate files.
 
-Page ranges are 1-based and comma-separated. They support single pages
-(`5`), closed ranges (`1-3`), open-ended ranges (`7-`), and negative numbers
-counting from the end (`-1`, `-3--1`). The source PDFs are never changed.
+Page ranges use human-facing page numbers and are comma-separated. Positive
+numbers are 1-based (`1` is the first page); negative numbers count back from
+the end (`-1` is the last page, `-3--1` is the last three pages). Ranges may be
+closed (`1-3`) or open-ended (`7-`). The source PDFs are never changed.
 Password-protected PDFs are not supported.
 
 ## Development
