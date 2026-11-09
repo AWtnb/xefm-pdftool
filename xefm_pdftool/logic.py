@@ -9,8 +9,7 @@ from pathlib import Path
 
 import pymupdf
 
-_PAGE_RANGE = re.compile(r"(\d+)(?:\s*-\s*(\d+))?")
-_PAGE_TOKEN = re.compile(r"(-?\d+)\s*(?:-\s*(-?\d*))?")
+_PAGE_RANGE = re.compile(r"(-?\d+)\s*(?:-\s*(-?\d*))?")
 
 
 def pdf_name(text, default):
@@ -25,20 +24,41 @@ def pdf_name(text, default):
     return name if name.lower().endswith(".pdf") else name + ".pdf"
 
 
-def parse_page_ranges(text):
-    """Parse 1-based inclusive ranges such as ``1-3, 5, 8-10``."""
+def parse_page_ranges(text, page_count=None, allow_overlaps=False):
+    """Parse 1-based inclusive ranges, resolving open and negative pages if bounded."""
     if not text or not text.strip():
         raise ValueError("Enter one or more page ranges, such as 1-3,5.")
     ranges = []
     for part in text.split(","):
-        match = _PAGE_RANGE.fullmatch(part.strip())
+        token = part.strip()
+        match = _PAGE_RANGE.fullmatch(token)
         if match is None:
-            raise ValueError(f"Invalid page range: {part.strip()!r}")
+            raise ValueError(f"Invalid page range: {token!r}")
         first = int(match.group(1))
-        last = int(match.group(2) or first)
-        if first < 1 or last < first:
-            raise ValueError(f"Invalid page range: {part.strip()!r}")
-        if any(
+        end_text = match.group(2)
+        last = first if end_text is None else (
+            page_count if end_text == "" else int(end_text)
+        )
+        if page_count is None:
+            if first == 0 or last == 0:
+                raise ValueError(f"Page numbers cannot be zero: {token!r}")
+            if first < 1 or last is None:
+                raise ValueError("Negative and open-ended pages require a page count.")
+            if last < first:
+                raise ValueError(f"Invalid page range: {token!r}")
+        else:
+            if page_count < 1:
+                raise ValueError("The PDF has no pages.")
+            if first == 0 or last == 0:
+                raise ValueError(f"Page numbers cannot be zero: {token!r}")
+            first = first if first > 0 else page_count + first + 1
+            last = last if last is None or last > 0 else page_count + last + 1
+            last = page_count if last is None else last
+            if first < 1 or first > page_count or last < first or last > page_count:
+                raise ValueError(
+                    f"Page range is outside the {page_count}-page PDF: {token!r}"
+                )
+        if not allow_overlaps and any(
             first <= previous_last and previous_first <= last
             for previous_first, previous_last in ranges
         ):
@@ -159,7 +179,7 @@ def rotate_pdf(
     degrees=90,
     checkpoint=None,
     progress=None,
-    page_indices=None,
+    page_ranges=None,
 ):
     """Write a rotated copy of a PDF, leaving the source unchanged."""
     if not isinstance(degrees, int) or degrees % 90:
@@ -167,7 +187,16 @@ def rotate_pdf(
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
     try:
-        selected = set(page_indices) if page_indices is not None else None
+        selected = None
+        if page_ranges is not None:
+            ranges = parse_page_ranges(
+                page_ranges, document.page_count, allow_overlaps=True
+            )
+            selected = {
+                page_number - 1
+                for first, last in ranges
+                for page_number in range(first, last + 1)
+            }
         for index, page in enumerate(document):
             if checkpoint:
                 checkpoint()
@@ -180,38 +209,6 @@ def rotate_pdf(
         _save_atomically(document, target)
     finally:
         document.close()
-
-
-def parse_page_selection(text, page_count):
-    """Parse pdfjig-style ranges into zero-based page indices."""
-    if not text or not text.strip():
-        raise ValueError("Enter one or more page ranges.")
-    if page_count < 1:
-        raise ValueError("The PDF has no pages.")
-
-    indices = []
-    for token in text.split(","):
-        token = token.strip()
-        match = _PAGE_TOKEN.fullmatch(token)
-        if match is None:
-            raise ValueError(f"Invalid page range: {token!r}")
-
-        first = int(match.group(1))
-        end_text = match.group(2)
-        last = first if end_text is None else (
-            page_count if end_text == "" else int(end_text)
-        )
-        if first == 0 or last == 0:
-            raise ValueError(f"Page numbers cannot be zero: {token!r}")
-
-        first = first - 1 if first > 0 else page_count + first
-        last = last - 1 if last > 0 else page_count + last
-        if first < 0 or first >= page_count or last < first or last >= page_count:
-            raise ValueError(
-                f"Page range is outside the {page_count}-page PDF: {token!r}"
-            )
-        indices.extend(range(first, last + 1))
-    return indices
 
 
 def resolve_insertion_index(value, page_count):
@@ -246,7 +243,14 @@ def extract_pdf(source, target, ranges, checkpoint=None, progress=None):
     """Write the selected pages, preserving the range order."""
     document = _open_pdf(source)
     try:
-        indices = parse_page_selection(ranges, document.page_count)
+        parsed_ranges = parse_page_ranges(
+            ranges, document.page_count, allow_overlaps=True
+        )
+        indices = [
+            page_number - 1
+            for first, last in parsed_ranges
+            for page_number in range(first, last + 1)
+        ]
     finally:
         document.close()
     _ensure_distinct_outputs([source], [target])

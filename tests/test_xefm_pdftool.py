@@ -6,7 +6,6 @@ from xefm_pdftool.logic import (
     extract_pdf,
     insert_pdf,
     merge_pdfs,
-    parse_page_selection,
     parse_page_ranges,
     pdf_name,
     rotate_pdf,
@@ -49,6 +48,19 @@ def test_parse_page_ranges():
     for text in ("", "0", "3-1", "1-2,2-3", "one"):
         with pytest.raises(ValueError):
             parse_page_ranges(text)
+
+
+def test_parse_page_ranges_supports_pdfjig_syntax_with_page_count():
+    assert parse_page_ranges(
+        "1-3,5,7-,-3--1", 10, allow_overlaps=True
+    ) == [(1, 3), (5, 5), (7, 10), (8, 10)]
+    assert parse_page_ranges("-1", 3) == [(3, 3)]
+    for text in ("", "0", "1-0", "5-3", "1-4", "abc"):
+        with pytest.raises(ValueError):
+            parse_page_ranges(text, 3)
+
+    with pytest.raises(ValueError, match="Negative and open-ended"):
+        parse_page_ranges("1-")
 
 
 def test_merge_pdfs_preserves_source_order(tmp_path):
@@ -120,7 +132,7 @@ def test_rotate_pdf_can_rotate_only_selected_pages(tmp_path):
     source = make_pdf(tmp_path / "source.pdf", 3)
     target = tmp_path / "rotated.pdf"
 
-    rotate_pdf(source, target, -90, page_indices=[1])
+    rotate_pdf(source, target, -90, page_ranges="2")
 
     original = pymupdf.open(source)
     rotated = pymupdf.open(target)
@@ -130,16 +142,6 @@ def test_rotate_pdf_can_rotate_only_selected_pages(tmp_path):
     finally:
         original.close()
         rotated.close()
-
-
-def test_parse_page_selection_supports_pdfjig_ranges():
-    assert parse_page_selection("1-3,5,7-,-3--1", 10) == [
-        0, 1, 2, 4, 6, 7, 8, 9, 7, 8, 9
-    ]
-    assert parse_page_selection("-1", 3) == [2]
-    for text in ("", "0", "1-0", "5-3", "1-4", "abc"):
-        with pytest.raises(ValueError):
-            parse_page_selection(text, 3)
 
 
 def test_extract_pdf_writes_selected_pages_in_requested_order(tmp_path):

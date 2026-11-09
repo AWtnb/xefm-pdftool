@@ -2,14 +2,11 @@
 
 from pathlib import Path
 
-import pymupdf
-
 from xefm_pdftool.logic import (
     apply_trimbox_pdf,
     extract_pdf,
     insert_pdf,
     merge_pdfs,
-    parse_page_selection,
     parse_page_ranges,
     pdf_name,
     range_suffix,
@@ -219,22 +216,17 @@ def rotate(ctx):
             def work(job):
                 for index, (entry, target) in enumerate(zip(entries, targets)):
                     job.checkpoint()
-                    page_count = pymupdf.open(entry.path)
-                    try:
-                        selected = parse_page_selection(ranges, page_count.page_count)
-                    finally:
-                        page_count.close()
                     rotate_pdf(
                         entry.path,
                         target,
                         angle,
                         checkpoint=job.checkpoint,
-                        progress=lambda done, total, detail: job.progress(
+                        progress=lambda done, total, detail, index=index, entry=entry: job.progress(
                             index,
                             len(entries),
                             detail=f"{entry.name} — page {done + 1}/{total}",
                         ),
-                        page_indices=selected,
+                        page_ranges=ranges,
                     )
 
             _start(ctx, f"{TITLE}: rotate", targets, work)
@@ -274,7 +266,7 @@ def apply_trimbox(ctx):
                 entry.path,
                 target,
                 checkpoint=job.checkpoint,
-                progress=lambda done, total, detail: job.progress(
+                progress=lambda done, total, detail, index=index, entry=entry: job.progress(
                     index,
                     len(entries),
                     detail=f"{entry.name} — page {done + 1}/{total}",
@@ -493,9 +485,7 @@ def unzip(ctx):
             targets[0],
             targets[1],
             checkpoint=job.checkpoint,
-            progress=lambda done, total, detail: _progress(
-                job, done, total, detail
-            ),
+            progress=lambda done, total, detail: _progress(job, done, total, detail),
         )
 
     _start(ctx, f"{TITLE}: unzip", targets, work)
