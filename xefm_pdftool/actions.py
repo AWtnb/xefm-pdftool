@@ -169,11 +169,6 @@ def merge(ctx) -> None:
     ctx.input("Output PDF name", default, title=f"{TITLE}: merge", on_accept=accepted)
 
 
-def conc(ctx) -> None:
-    """Concatenate selected PDFs into one PDF in the other pane."""
-    merge(ctx)
-
-
 def split_ranges(ctx) -> None:
     """Extract the requested page ranges into separate PDFs."""
     entries = _selected_pdfs(ctx)

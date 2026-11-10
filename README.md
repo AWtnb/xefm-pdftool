@@ -25,7 +25,7 @@ command palette. When an action needs parameters, it asks for them with XeFM's
 input prompt. PDF outputs are written to the other pane's local folder, and
 existing files are replaced only after confirmation.
 
-- **Merge PDFs… / Concatenate PDFs…** combines selected PDFs in pane order and
+- **Merge PDFs…** combines selected PDFs in pane order and
   asks for an output name.
 - **Extract PDF pages…** writes selected pages from one PDF to a new file.
 - **Split PDF pages in half…** lets you choose left/right or top/bottom halves
