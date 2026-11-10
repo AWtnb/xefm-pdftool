@@ -582,7 +582,7 @@ wheels = [
 
 [[package]]
 name = "xefm-pdftool"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "pymupdf", version = "1.28.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
