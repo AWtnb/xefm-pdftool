@@ -1,3 +1,19 @@
+# xefm-pdftool
+# Copyright (C) 2026  AWtnb
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 """PDF operations that do not depend on XeFM."""
 
 import math
@@ -41,24 +57,17 @@ def parse_page_ranges(
             raise ValueError(f"Invalid page range: {token!r}")
         first = int(match.group(1))
         end_text = match.group(2)
-        last = first if end_text is None else (
-            page_count if end_text == "" else int(end_text)
+        last = (
+            first
+            if end_text is None
+            else (page_count if end_text == "" else int(end_text))
         )
         if first == 0 or last == 0:
             raise ValueError(f"Page numbers cannot be zero: {token!r}")
         first = first if not first <= 0 else page_count + first + 1
-        last = (
-            last
-            if last is None or not last <= 0
-            else page_count + last + 1
-        )
+        last = last if last is None or not last <= 0 else page_count + last + 1
         last = page_count if last is None else last
-        if (
-            first < 1
-            or page_count < first
-            or last < first
-            or page_count < last
-        ):
+        if first < 1 or page_count < first or last < first or page_count < last:
             raise ValueError(
                 f"Page range is outside the {page_count}-page PDF: {token!r}"
             )
@@ -123,9 +132,7 @@ def _temporary_pdf_path(target: Path) -> Path:
     return target.with_name(os.path.basename(name))
 
 
-def _ensure_distinct_outputs(
-    sources: Sequence[Path], targets: Sequence[Path]
-) -> None:
+def _ensure_distinct_outputs(sources: Sequence[Path], targets: Sequence[Path]) -> None:
     output_paths = {target.resolve() for target in targets}
     for source in sources:
         if "://" not in str(source) and Path(str(source)).resolve() in output_paths:
@@ -427,10 +434,7 @@ def trim_margin_pdf(
             x_outset = box.width * right / 100
             y_inset = box.height * top / 100
             y_outset = box.height * bottom / 100
-            if (
-                box.width <= x_inset + x_outset
-                or box.height <= y_inset + y_outset
-            ):
+            if box.width <= x_inset + x_outset or box.height <= y_inset + y_outset:
                 raise ValueError("Margins would remove the entire page.")
             page.set_mediabox(
                 pymupdf.Rect(
@@ -447,9 +451,7 @@ def trim_margin_pdf(
         document.close()
 
 
-def _show_clipped_page(
-    output, source, page_number: int, clip
-) -> None:
+def _show_clipped_page(output, source, page_number: int, clip) -> None:
     page = output.new_page(width=clip.width, height=clip.height)
     page.show_pdf_page(page.rect, source, page_number, clip=clip)
 
@@ -555,9 +557,7 @@ def spread_pages_pdf(
                 ]
             spread = output.new_page(width=width, height=height)
             for page, placement in zip(pair, placements):
-                spread.show_pdf_page(
-                    placement, document, page.number, clip=page.rect
-                )
+                spread.show_pdf_page(placement, document, page.number, clip=page.rect)
             if progress:
                 progress(index // 2, (len(page_numbers) + 1) // 2, first.number + 1)
         if checkpoint:

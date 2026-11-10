@@ -73,3 +73,11 @@ creates a release commit and annotated `vX.Y.Z` tag, then atomically pushes the
 current branch and tag to `origin`. The working tree must be clean. Use
 `--part minor` or `--part major` for a different version component, or
 `--dry-run` to preview.
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+### Dependencies
+
+- [PyMuPDF](https://github.com) (Licensed under AGPLv3)
