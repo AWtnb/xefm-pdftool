@@ -24,7 +24,7 @@ from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
-import pymupdf
+import pikepdf
 
 _PAGE_RANGE = re.compile(r"(-?\d+)\s*(?:-\s*(-?\d*))?")
 
@@ -84,7 +84,7 @@ def pdf_page_count(source: Path) -> int:
     """Return a PDF's page count after applying the standard PDF validation."""
     document = _open_pdf(source)
     try:
-        return document.page_count
+        return len(document.pages)
     finally:
         document.close()
 
@@ -103,18 +103,17 @@ def _page_indices(ranges: Sequence[tuple[int, int]]) -> list[int]:
 
 
 def _open_pdf(path: Path):
-    with path.open("rb") as stream:
-        document = pymupdf.open(stream=stream.read(), filetype="pdf")
-    if document.needs_pass:
-        document.close()
-        raise ValueError(f"PDF is password-protected: {path.name}")
-    if not document.page_count:
+    try:
+        document = pikepdf.Pdf.open(path)
+    except pikepdf.PasswordError as exc:
+        raise ValueError(f"PDF is password-protected: {path.name}") from exc
+    if not len(document.pages):
         document.close()
         raise ValueError(f"PDF has no pages: {path.name}")
     return document
 
 
-def _save_atomically(document, target: Path) -> None:
+def _save_atomically(document: pikepdf.Pdf, target: Path) -> None:
     temporary = _temporary_pdf_path(target)
     try:
         document.save(temporary)
@@ -149,7 +148,7 @@ def merge_pdfs(
     if not sources:
         raise ValueError("Select at least one source PDF.")
     _ensure_distinct_outputs(sources, [target])
-    result = pymupdf.open()
+    result = pikepdf.Pdf.new()
     try:
         for index, source in enumerate(sources):
             if checkpoint:
@@ -158,7 +157,7 @@ def merge_pdfs(
                 progress(index, len(sources), source.name)
             document = _open_pdf(source)
             try:
-                result.insert_pdf(document)
+                result.pages.extend(document.pages)
             finally:
                 document.close()
         if checkpoint:
@@ -184,20 +183,21 @@ def split_pdf(
     document = _open_pdf(source)
     temporary_files = []
     try:
+        page_count = len(document.pages)
         for first, last in ranges:
-            if first < 1 or last < first or document.page_count < last:
+            if first < 1 or last < first or page_count < last:
                 raise ValueError(
                     f"Page range {range_suffix((first, last))} exceeds the "
-                    f"{document.page_count}-page PDF."
+                    f"{page_count}-page PDF."
                 )
         for index, ((first, last), target) in enumerate(zip(ranges, targets)):
             if checkpoint:
                 checkpoint()
             if progress:
                 progress(index, len(ranges), target.name)
-            part = pymupdf.open()
+            part = pikepdf.Pdf.new()
             try:
-                part.insert_pdf(document, from_page=first - 1, to_page=last - 1)
+                part.pages.extend(document.pages[first - 1 : last])
                 temporary = _temporary_pdf_path(target)
                 temporary_files.append((temporary, target))
                 part.save(temporary)
@@ -231,16 +231,16 @@ def rotate_pdf(
         selected = None
         if page_ranges is not None:
             ranges = parse_page_ranges(
-                page_ranges, document.page_count, allow_overlaps=True
+                page_ranges, len(document.pages), allow_overlaps=True
             )
             selected = set(_page_indices(ranges))
-        for index, page in enumerate(document):
+        for index, page in enumerate(document.pages):
             if checkpoint:
                 checkpoint()
             if progress:
-                progress(index, document.page_count, source.name)
+                progress(index, len(document.pages), source.name)
             if selected is None or index in selected:
-                page.set_rotation((page.rotation + degrees) % 360)
+                page.obj["/Rotate"] = (_page_rotation(page) + degrees) % 360
         if checkpoint:
             checkpoint()
         _save_atomically(document, target)
@@ -258,6 +258,16 @@ def resolve_insertion_index(value: int, page_count: int) -> int:
     return index
 
 
+def _page_rotation(page: pikepdf.Page) -> int:
+    node = page.obj
+    while node is not None:
+        rotation = node.get("/Rotate")
+        if rotation is not None:
+            return int(rotation)
+        node = node.get("/Parent")
+    return 0
+
+
 def _copy_page_indices(
     source: Path,
     target: Path,
@@ -266,14 +276,14 @@ def _copy_page_indices(
     progress: Callable[[int, int, str], None] | None = None,
 ) -> None:
     document = _open_pdf(source)
-    result = pymupdf.open()
+    result = pikepdf.Pdf.new()
     try:
         for index, page_number in enumerate(indices):
             if checkpoint:
                 checkpoint()
             if progress:
                 progress(index, len(indices), f"page {page_number + 1}")
-            result.insert_pdf(document, from_page=page_number, to_page=page_number)
+            result.pages.append(document.pages[page_number])
         if checkpoint:
             checkpoint()
         _save_atomically(result, target)
@@ -293,7 +303,7 @@ def extract_pdf(
     document = _open_pdf(source)
     try:
         parsed_ranges = parse_page_ranges(
-            ranges, document.page_count, allow_overlaps=True
+            ranges, len(document.pages), allow_overlaps=True
         )
         indices = _page_indices(parsed_ranges)
     finally:
@@ -317,20 +327,21 @@ def insert_pdf(
         stack.callback(base.close)
         inserted = _open_pdf(insert_source)
         stack.callback(inserted.close)
-        result = pymupdf.open()
+        result = pikepdf.Pdf.new()
         stack.callback(result.close)
-        position = resolve_insertion_index(start, base.page_count)
+        base_page_count = len(base.pages)
+        position = resolve_insertion_index(start, base_page_count)
         if checkpoint:
             checkpoint()
         if progress:
             progress(0, 3, base_source.name)
         if position:
-            result.insert_pdf(base, from_page=0, to_page=position - 1)
+            result.pages.extend(base.pages[:position])
         if progress:
             progress(1, 3, insert_source.name)
-        result.insert_pdf(inserted)
-        if position < base.page_count:
-            result.insert_pdf(base, from_page=position, to_page=base.page_count - 1)
+        result.pages.extend(inserted.pages)
+        if position < base_page_count:
+            result.pages.extend(base.pages[position:])
         if checkpoint:
             checkpoint()
         _save_atomically(result, target)
@@ -351,23 +362,24 @@ def swap_pdf(
         stack.callback(base.close)
         replacement = _open_pdf(replacement_source)
         stack.callback(replacement.close)
-        result = pymupdf.open()
+        result = pikepdf.Pdf.new()
         stack.callback(result.close)
-        position = resolve_insertion_index(start, base.page_count)
-        if base.page_count == position:
+        base_page_count = len(base.pages)
+        position = resolve_insertion_index(start, base_page_count)
+        if base_page_count == position:
             raise ValueError("The swap start page must refer to an existing page.")
         if checkpoint:
             checkpoint()
         if progress:
             progress(0, 3, base_source.name)
         if position:
-            result.insert_pdf(base, from_page=0, to_page=position - 1)
+            result.pages.extend(base.pages[:position])
         if progress:
             progress(1, 3, replacement_source.name)
-        result.insert_pdf(replacement)
-        tail_start = min(position + replacement.page_count, base.page_count)
-        if tail_start < base.page_count:
-            result.insert_pdf(base, from_page=tail_start, to_page=base.page_count - 1)
+        result.pages.extend(replacement.pages)
+        tail_start = min(position + len(replacement.pages), base_page_count)
+        if tail_start < base_page_count:
+            result.pages.extend(base.pages[tail_start:])
         if checkpoint:
             checkpoint()
         _save_atomically(result, target)
@@ -383,12 +395,13 @@ def apply_trimbox_pdf(
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
     try:
-        for index, page in enumerate(document):
+        for index, page in enumerate(document.pages):
             if checkpoint:
                 checkpoint()
             if progress:
-                progress(index, document.page_count, page.number + 1)
-            page.set_mediabox(page.trimbox)
+                progress(index, len(document.pages), index + 1)
+            page.mediabox = page.trimbox
+            page.cropbox = page.trimbox
         if checkpoint:
             checkpoint()
         _save_atomically(document, target)
@@ -424,26 +437,28 @@ def trim_margin_pdf(
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
     try:
-        for index, page in enumerate(document):
+        for index, page in enumerate(document.pages):
             if checkpoint:
                 checkpoint()
             if progress:
-                progress(index, document.page_count, page.number + 1)
-            box = page.mediabox
-            x_inset = box.width * left / 100
-            x_outset = box.width * right / 100
-            y_inset = box.height * top / 100
-            y_outset = box.height * bottom / 100
-            if box.width <= x_inset + x_outset or box.height <= y_inset + y_outset:
+                progress(index, len(document.pages), index + 1)
+            x0, y0, x1, y1 = [float(value) for value in page.mediabox]
+            width = x1 - x0
+            height = y1 - y0
+            x_inset = width * left / 100
+            x_outset = width * right / 100
+            y_inset = height * top / 100
+            y_outset = height * bottom / 100
+            if width <= x_inset + x_outset or height <= y_inset + y_outset:
                 raise ValueError("Margins would remove the entire page.")
-            page.set_mediabox(
-                pymupdf.Rect(
-                    box.x0 + x_inset,
-                    box.y0 + y_inset,
-                    box.x1 - x_outset,
-                    box.y1 - y_outset,
-                )
-            )
+            cropped_box = [
+                x0 + x_inset,
+                y0 + y_outset,
+                x1 - x_outset,
+                y1 - y_inset,
+            ]
+            page.mediabox = cropped_box
+            page.cropbox = cropped_box
         if checkpoint:
             checkpoint()
         _save_atomically(document, target)
@@ -451,9 +466,31 @@ def trim_margin_pdf(
         document.close()
 
 
-def _show_clipped_page(output, source, page_number: int, clip) -> None:
-    page = output.new_page(width=clip.width, height=clip.height)
-    page.show_pdf_page(page.rect, source, page_number, clip=clip)
+def _page_box(page: pikepdf.Page) -> tuple[float, float, float, float]:
+    media_box = [float(value) for value in page.mediabox]
+    crop_box = [float(value) for value in page.cropbox]
+    return (
+        max(media_box[0], crop_box[0]),
+        max(media_box[1], crop_box[1]),
+        min(media_box[2], crop_box[2]),
+        min(media_box[3], crop_box[3]),
+    )
+
+
+def _show_clipped_page(
+    output: pikepdf.Pdf,
+    source: pikepdf.Page,
+    clip: tuple[float, float, float, float],
+    width: float,
+    height: float,
+) -> None:
+    form = source.as_form_xobject()
+    form["/BBox"] = pikepdf.Array(clip)
+    page = output.add_blank_page(page_size=(width, height))
+    page.add_overlay(
+        form,
+        pikepdf.Rectangle(0, 0, width, height),
+    )
 
 
 def split_pages_pdf(
@@ -467,30 +504,37 @@ def split_pages_pdf(
     """Split every page into two equal halves."""
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
-    output = pymupdf.open()
+    output = pikepdf.Pdf.new()
     try:
-        for index, page in enumerate(document):
+        for index, page in enumerate(document.pages):
             if checkpoint:
                 checkpoint()
             if progress:
-                progress(index, document.page_count, page.number + 1)
-            box = page.rect
+                progress(index, len(document.pages), index + 1)
+            box = _page_box(page)
+            x0, y0, x1, y1 = box
             if vertical:
-                middle = (box.y0 + box.y1) / 2
+                middle = (y0 + y1) / 2
                 clips = [
-                    pymupdf.Rect(box.x0, box.y0, box.x1, middle),
-                    pymupdf.Rect(box.x0, middle, box.x1, box.y1),
+                    (x0, middle, x1, y1),
+                    (x0, y0, x1, middle),
                 ]
             else:
-                middle = (box.x0 + box.x1) / 2
+                middle = (x0 + x1) / 2
                 clips = [
-                    pymupdf.Rect(box.x0, box.y0, middle, box.y1),
-                    pymupdf.Rect(middle, box.y0, box.x1, box.y1),
+                    (x0, y0, middle, y1),
+                    (middle, y0, x1, y1),
                 ]
             if opposite:
                 clips.reverse()
             for clip in clips:
-                _show_clipped_page(output, document, page.number, clip)
+                _show_clipped_page(
+                    output,
+                    page,
+                    clip,
+                    clip[2] - clip[0],
+                    clip[3] - clip[1],
+                )
         if checkpoint:
             checkpoint()
         _save_atomically(output, target)
@@ -511,55 +555,66 @@ def spread_pages_pdf(
     """Combine adjacent page pairs into landscape/portrait spreads."""
     _ensure_distinct_outputs([source], [target])
     document = _open_pdf(source)
-    output = pymupdf.open()
+    output = pikepdf.Pdf.new()
     try:
-        page_numbers = list(range(document.page_count))
+        page_numbers = list(range(len(document.pages)))
         if single_top and page_numbers:
-            output.insert_pdf(document, from_page=0, to_page=0)
+            output.pages.append(document.pages[0])
             page_numbers = page_numbers[1:]
         for index in range(0, len(page_numbers), 2):
             if checkpoint:
                 checkpoint()
-            first = document[page_numbers[index]]
+            first = document.pages[page_numbers[index]]
             if len(page_numbers) == index + 1:
-                output.insert_pdf(
-                    document, from_page=first.number, to_page=first.number
-                )
+                output.pages.append(first)
                 continue
-            second = document[page_numbers[index + 1]]
+            second = document.pages[page_numbers[index + 1]]
             pair = [first, second]
             if opposite:
                 pair.reverse()
-            first_box, second_box = pair[0].rect, pair[1].rect
+            first_box, second_box = _page_box(pair[0]), _page_box(pair[1])
+            first_width = first_box[2] - first_box[0]
+            first_height = first_box[3] - first_box[1]
+            second_width = second_box[2] - second_box[0]
+            second_height = second_box[3] - second_box[1]
             if vertical:
-                width = max(first_box.width, second_box.width)
-                height = first_box.height + second_box.height
+                width = max(first_width, second_width)
+                height = first_height + second_height
                 placements = [
-                    pymupdf.Rect(0, 0, first_box.width, first_box.height),
-                    pymupdf.Rect(
+                    (0, second_height, first_width, height),
+                    (
                         0,
-                        first_box.height,
-                        second_box.width,
-                        first_box.height + second_box.height,
+                        0,
+                        second_width,
+                        second_height,
                     ),
                 ]
             else:
-                width = first_box.width + second_box.width
-                height = max(first_box.height, second_box.height)
+                width = first_width + second_width
+                height = max(first_height, second_height)
                 placements = [
-                    pymupdf.Rect(0, 0, first_box.width, first_box.height),
-                    pymupdf.Rect(
-                        first_box.width,
+                    (0, 0, first_width, first_height),
+                    (
+                        first_width,
                         0,
-                        first_box.width + second_box.width,
-                        second_box.height,
+                        width,
+                        second_height,
                     ),
                 ]
-            spread = output.new_page(width=width, height=height)
-            for page, placement in zip(pair, placements):
-                spread.show_pdf_page(placement, document, page.number, clip=page.rect)
+            spread = output.add_blank_page(page_size=(width, height))
+            for source_page, placement in zip(pair, placements):
+                form = source_page.as_form_xobject()
+                form["/BBox"] = pikepdf.Array(_page_box(source_page))
+                spread.add_overlay(
+                    form,
+                    pikepdf.Rectangle(*placement),
+                )
             if progress:
-                progress(index // 2, (len(page_numbers) + 1) // 2, first.number + 1)
+                progress(
+                    index // 2,
+                    (len(page_numbers) + 1) // 2,
+                    page_numbers[index] + 1,
+                )
         if checkpoint:
             checkpoint()
         _save_atomically(output, target)
@@ -579,8 +634,8 @@ def unzip_pdf(
     _ensure_distinct_outputs([source], [odd_target, even_target])
     document = _open_pdf(source)
     try:
-        odd = [index for index in range(document.page_count) if index % 2 == 0]
-        even = [index for index in range(document.page_count) if index % 2 == 1]
+        odd = [index for index in range(len(document.pages)) if index % 2 == 0]
+        even = [index for index in range(len(document.pages)) if index % 2 == 1]
     finally:
         document.close()
     _copy_page_indices(source, odd_target, odd, checkpoint, progress)

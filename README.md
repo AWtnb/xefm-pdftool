@@ -1,6 +1,6 @@
 # xefm-pdftool
 
-[XeFM](https://github.com/crftwr/xefm) extension for editing and transforming PDF files with [PyMuPDF](https://pymupdf.readthedocs.io/).
+[XeFM](https://github.com/crftwr/xefm) extension for editing and transforming PDF files with [pikepdf](https://pikepdf.readthedocs.io/).
 
 ## Use
 
@@ -80,4 +80,4 @@ This project is licensed under the GNU Affero General Public License v3.0 - see 
 
 ### Dependencies
 
-- [PyMuPDF](https://github.com) (Licensed under AGPLv3)
+- [pikepdf](https://github.com/pikepdf/pikepdf) (Licensed under MPL-2.0)

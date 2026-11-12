@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-import pymupdf
+import pikepdf
 import pytest
 
 from xefm_pdftool import actions
@@ -28,12 +28,12 @@ class ChooseContext:
         self.on_result = on_result
 
 
-def exercise_action_choice(action, operation, target_name, tmp_path, monkeypatch, index):
+def exercise_action_choice(
+    action, operation, target_name, tmp_path, monkeypatch, index
+):
     entry = SimpleNamespace(path=tmp_path / "source.pdf")
     target = tmp_path / target_name
-    monkeypatch.setattr(
-        actions, "_single_source_target", lambda *args: (entry, target)
-    )
+    monkeypatch.setattr(actions, "_single_source_target", lambda *args: (entry, target))
     captured = {}
     monkeypatch.setattr(
         actions, operation.__name__, lambda *args, **kwargs: captured.update(kwargs)
@@ -42,9 +42,7 @@ def exercise_action_choice(action, operation, target_name, tmp_path, monkeypatch
         checkpoint=lambda: None,
         progress=lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(
-        actions, "_start", lambda ctx, title, targets, work: work(job)
-    )
+    monkeypatch.setattr(actions, "_start", lambda ctx, title, targets, work: work(job))
     ctx = ChooseContext()
 
     action(ctx)
@@ -53,21 +51,36 @@ def exercise_action_choice(action, operation, target_name, tmp_path, monkeypatch
 
 
 def make_pdf(path, page_count):
-    document = pymupdf.open()
+    document = pikepdf.Pdf.new()
     for number in range(1, page_count + 1):
-        page = document.new_page()
-        page.insert_text((72, 72), f"Page {number}")
+        page = document.add_blank_page(page_size=(612, 792))
+        page.obj["/Resources"] = pikepdf.Dictionary(
+            Font=pikepdf.Dictionary(
+                F1=pikepdf.Dictionary(
+                    Type=pikepdf.Name.Font,
+                    Subtype=pikepdf.Name.Type1,
+                    BaseFont=pikepdf.Name.Helvetica,
+                )
+            )
+        )
+        page.obj["/Contents"] = document.make_stream(
+            f"BT /F1 12 Tf 72 720 Td (Page {number}) Tj ET".encode()
+        )
     document.save(path)
     document.close()
     return path
 
 
 def page_text(path):
-    document = pymupdf.open(path)
-    try:
-        return [page.get_text().strip() for page in document]
-    finally:
-        document.close()
+    with pikepdf.Pdf.open(path) as document:
+        return [
+            page.obj["/Contents"]
+            .read_bytes()
+            .decode()
+            .replace("BT /F1 12 Tf 72 720 Td (", "")
+            .replace(") Tj ET", "")
+            for page in document.pages
+        ]
 
 
 def test_pdf_name_adds_extension_and_rejects_paths():
@@ -82,18 +95,19 @@ def test_parse_page_ranges():
         (5, 5),
         (8, 10),
     ]
-    assert parse_page_ranges("1-1000000000", 1_000_000_000) == [
-        (1, 1_000_000_000)
-    ]
+    assert parse_page_ranges("1-1000000000", 1_000_000_000) == [(1, 1_000_000_000)]
     for text in ("", "0", "3-1", "1-2,2-3", "one"):
         with pytest.raises(ValueError):
             parse_page_ranges(text, 10)
 
 
 def test_parse_page_ranges_supports_pdfjig_syntax_with_page_count():
-    assert parse_page_ranges(
-        "1-3,5,7-,-3--1", 10, allow_overlaps=True
-    ) == [(1, 3), (5, 5), (7, 10), (8, 10)]
+    assert parse_page_ranges("1-3,5,7-,-3--1", 10, allow_overlaps=True) == [
+        (1, 3),
+        (5, 5),
+        (7, 10),
+        (8, 10),
+    ]
     assert parse_page_ranges("-1", 3) == [(3, 3)]
     assert parse_page_ranges("-3--1", 5) == [(3, 5)]
     assert parse_page_ranges("2-", 5) == [(2, 5)]
@@ -153,14 +167,9 @@ def test_rotate_pdf_rotates_copy_and_preserves_source(tmp_path):
 
     rotate_pdf(source, target)
 
-    original = pymupdf.open(source)
-    rotated = pymupdf.open(target)
-    try:
-        assert original[0].rotation == 0
-        assert rotated[0].rotation == 90
-    finally:
-        original.close()
-        rotated.close()
+    with pikepdf.Pdf.open(source) as original, pikepdf.Pdf.open(target) as rotated:
+        assert original.pages[0].obj.get("/Rotate", 0) == 0
+        assert rotated.pages[0].obj["/Rotate"] == 90
 
 
 def test_rotate_pdf_rejects_unsupported_angle(tmp_path):
@@ -176,14 +185,9 @@ def test_rotate_pdf_can_rotate_only_selected_pages(tmp_path):
 
     rotate_pdf(source, target, -90, page_ranges="-1")
 
-    original = pymupdf.open(source)
-    rotated = pymupdf.open(target)
-    try:
-        assert [page.rotation for page in original] == [0, 0, 0]
-        assert [page.rotation for page in rotated] == [0, 0, 270]
-    finally:
-        original.close()
-        rotated.close()
+    with pikepdf.Pdf.open(source) as original, pikepdf.Pdf.open(target) as rotated:
+        assert [page.obj.get("/Rotate", 0) for page in original.pages] == [0, 0, 0]
+        assert [page.obj.get("/Rotate", 0) for page in rotated.pages] == [0, 0, 270]
 
 
 def test_extract_pdf_writes_selected_pages_in_requested_order(tmp_path):
@@ -219,10 +223,21 @@ def test_swap_pdf_replaces_the_same_number_of_base_pages_as_inserted(tmp_path):
 
 def test_apply_trimbox_and_trim_margin_preserve_sources(tmp_path):
     source = tmp_path / "source.pdf"
-    document = pymupdf.open()
-    page = document.new_page(width=200, height=300)
-    page.insert_text((72, 72), "Page 1")
-    page.set_trimbox(pymupdf.Rect(10, 20, 190, 280))
+    document = pikepdf.Pdf.new()
+    page = document.add_blank_page(page_size=(200, 300))
+    page.obj["/Resources"] = pikepdf.Dictionary(
+        Font=pikepdf.Dictionary(
+            F1=pikepdf.Dictionary(
+                Type=pikepdf.Name.Font,
+                Subtype=pikepdf.Name.Type1,
+                BaseFont=pikepdf.Name.Helvetica,
+            )
+        )
+    )
+    page.obj["/Contents"] = document.make_stream(
+        b"BT /F1 12 Tf 72 720 Td (Page 1) Tj ET"
+    )
+    page.trimbox = pikepdf.Array([10, 20, 190, 280])
     document.save(source)
     document.close()
     trimbox_target = tmp_path / "trimbox.pdf"
@@ -231,23 +246,28 @@ def test_apply_trimbox_and_trim_margin_preserve_sources(tmp_path):
     apply_trimbox_pdf(source, trimbox_target)
     trim_margin_pdf(source, margin_target, "10")
 
-    original = pymupdf.open(source)
-    trimbox = pymupdf.open(trimbox_target)
-    trimmed = pymupdf.open(margin_target)
-    try:
-        expected_trimbox = original[0].trimbox
-        assert trimbox[0].mediabox.width == pytest.approx(expected_trimbox.width)
-        assert trimbox[0].mediabox.height == pytest.approx(expected_trimbox.height)
-        assert trimmed[0].cropbox.width == pytest.approx(
-            original[0].cropbox.width * 0.8
+    with (
+        pikepdf.Pdf.open(source) as original,
+        pikepdf.Pdf.open(trimbox_target) as trimbox,
+        pikepdf.Pdf.open(margin_target) as trimmed,
+    ):
+        expected_trimbox = original.pages[0].trimbox
+        assert float(
+            trimbox.pages[0].mediabox[2] - trimbox.pages[0].mediabox[0]
+        ) == pytest.approx(float(expected_trimbox[2] - expected_trimbox[0]))
+        assert float(
+            trimbox.pages[0].mediabox[3] - trimbox.pages[0].mediabox[1]
+        ) == pytest.approx(float(expected_trimbox[3] - expected_trimbox[1]))
+        assert float(
+            trimmed.pages[0].cropbox[2] - trimmed.pages[0].cropbox[0]
+        ) == pytest.approx(
+            float(original.pages[0].cropbox[2] - original.pages[0].cropbox[0]) * 0.8
         )
-        assert trimmed[0].cropbox.height == pytest.approx(
-            original[0].cropbox.height * 0.8
+        assert float(
+            trimmed.pages[0].cropbox[3] - trimmed.pages[0].cropbox[1]
+        ) == pytest.approx(
+            float(original.pages[0].cropbox[3] - original.pages[0].cropbox[1]) * 0.8
         )
-    finally:
-        original.close()
-        trimbox.close()
-        trimmed.close()
     assert page_text(trimbox_target) == ["Page 1"]
     assert source.exists()
 
@@ -261,6 +281,18 @@ def test_trim_margin_rejects_margins_that_remove_the_page(tmp_path):
     assert not (tmp_path / "trimmed.pdf").exists()
 
 
+def test_trim_margin_applies_each_named_side_in_pdf_coordinates(tmp_path):
+    source = make_pdf(tmp_path / "source.pdf", 1)
+    target = tmp_path / "trimmed.pdf"
+
+    trim_margin_pdf(source, target, "10,20,30,40")
+
+    with pikepdf.Pdf.open(target) as trimmed:
+        assert [float(value) for value in trimmed.pages[0].mediabox] == pytest.approx(
+            [244.8, 237.6, 489.6, 712.8]
+        )
+
+
 def test_split_and_spread_pages(tmp_path):
     source = make_pdf(tmp_path / "source.pdf", 2)
     split_target = tmp_path / "split.pdf"
@@ -269,21 +301,22 @@ def test_split_and_spread_pages(tmp_path):
     split_pages_pdf(source, split_target)
     spread_pages_pdf(source, spread_target)
 
-    split = pymupdf.open(split_target)
-    spread = pymupdf.open(spread_target)
-    try:
-        assert split.page_count == 4
-        assert split[0].rect.width == pytest.approx(split[1].rect.width)
-        source_doc = pymupdf.open(source)
-        try:
-            assert split[0].rect.width == pytest.approx(source_doc[0].rect.width / 2)
-            assert spread[0].rect.width == pytest.approx(source_doc[0].rect.width * 2)
-        finally:
-            source_doc.close()
-        assert spread.page_count == 1
-    finally:
-        split.close()
-        spread.close()
+    with (
+        pikepdf.Pdf.open(split_target) as split,
+        pikepdf.Pdf.open(spread_target) as spread,
+        pikepdf.Pdf.open(source) as source_doc,
+    ):
+        assert len(split.pages) == 4
+        assert float(split.pages[0].mediabox[2]) == pytest.approx(
+            float(split.pages[1].mediabox[2])
+        )
+        assert float(split.pages[0].mediabox[2]) == pytest.approx(
+            float(source_doc.pages[0].mediabox[2]) / 2
+        )
+        assert float(spread.pages[0].mediabox[2]) == pytest.approx(
+            float(source_doc.pages[0].mediabox[2]) * 2
+        )
+        assert len(spread.pages) == 1
 
 
 @pytest.mark.parametrize(

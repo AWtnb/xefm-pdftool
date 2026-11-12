@@ -34,4 +34,4 @@ updates = "github:AWtnb/xefm-pdftool"
 "pdftool.unzip" = { menus = ["file", "context"], label = "Separate odd/even PDF pages…", when = "entry" }
 
 [requires]
-python_packages = ["PyMuPDF>=1.24"]
+python_packages = ["pikepdf>=9.0"]
